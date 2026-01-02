@@ -1,0 +1,47 @@
+# R and RStudio files
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# renv library (managed by renv)
+renv/library/
+renv/local/
+renv/staging/
+
+# Shiny app files
+rsconnect/
+
+# Data files (keep structure, ignore large data)
+*.csv
+*.xlsx
+*.rds
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+
+# Output files
+outputs/
+results/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Keep specific config files
+!configs/*.json
+!data/defaults.json
+
+# Keep documentation
+!docs/*.md
+!*.md

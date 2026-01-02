@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "name": "Default Configuration",
+    "description": "Baseline configuration with sensible defaults for Madrid neighborhood",
+    "version": "1.0.0",
+    "created_date": "2026-01-02"
+  },
+  "regional": {
+    "dwellings": 50000,
+    "population": 120000,
+    "parking_difficulty": 7,
+    "geographic_density": "urban"
+  },
+  "costs": {
+    "driver_hourly_rate": 15,
+    "cost_per_kg_wash": 0.25,
+    "cost_per_kg_dry": 0.40,
+    "overhead_per_week": 500,
+    "fuel_per_km": 0.10
+  },
+  "pricing": {
+    "wash_price": 7,
+    "dry_price": 8,
+    "self_check_discount": 2,
+    "subscription_discount_pct": 0.15
+  },
+  "capacity": {
+    "num_vans": 3,
+    "van_capacity_kg": 100,
+    "num_wash_machines": 10,
+    "num_dry_machines": 8,
+    "num_drivers": 4,
+    "operating_hours_per_day": 12
+  },
+  "randomization": {
+    "distribution_type": "normal",
+    "random_seed": 42,
+    "demand_scenario": "realistic",
+    "peak_hours_start": "18:00",
+    "peak_hours_end": "20:00",
+    "peak_hour_multiplier": 3.0,
+    "refund_rate": 0.02,
+    "failed_delivery_rate": 0.05
+  },
+  "elasticity": {
+    "price_elasticity": 1.5,
+    "self_check_adoption_rate": 0.30,
+    "subscription_ratio": 0.20
+  },
+  "simulation": {
+    "start_date": "2026-01-06",
+    "duration_days": 7,
+    "time_slot_hours": 2
+  }
+}

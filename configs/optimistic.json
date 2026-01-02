@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "name": "Optimistic Scenario",
+    "description": "Aggressive growth scenario with high demand, operational efficiencies, premium pricing",
+    "version": "1.0.0",
+    "created_date": "2026-01-02"
+  },
+  "regional": {
+    "dwellings": 50000,
+    "population": 120000,
+    "parking_difficulty": 6,
+    "geographic_density": "urban"
+  },
+  "costs": {
+    "driver_hourly_rate": 14,
+    "cost_per_kg_wash": 0.22,
+    "cost_per_kg_dry": 0.36,
+    "overhead_per_week": 450,
+    "fuel_per_km": 0.09
+  },
+  "pricing": {
+    "wash_price": 8,
+    "dry_price": 9,
+    "self_check_discount": 1.5,
+    "subscription_discount_pct": 0.10
+  },
+  "capacity": {
+    "num_vans": 4,
+    "van_capacity_kg": 100,
+    "num_wash_machines": 12,
+    "num_dry_machines": 10,
+    "num_drivers": 5,
+    "operating_hours_per_day": 14
+  },
+  "randomization": {
+    "distribution_type": "normal",
+    "random_seed": 42,
+    "demand_scenario": "optimistic",
+    "peak_hours_start": "18:00",
+    "peak_hours_end": "20:00",
+    "peak_hour_multiplier": 2.5,
+    "refund_rate": 0.01,
+    "failed_delivery_rate": 0.03
+  },
+  "elasticity": {
+    "price_elasticity": 1.2,
+    "self_check_adoption_rate": 0.45,
+    "subscription_ratio": 0.30
+  },
+  "simulation": {
+    "start_date": "2026-01-06",
+    "duration_days": 7,
+    "time_slot_hours": 2
+  }
+}
