@@ -70,27 +70,43 @@ check_dependencies()
 ```r
 # From R console or RStudio
 shiny::runApp()
+
+# Or specify the app directory
+shiny::runApp("path/to/fulo-simulate")
 ```
 
-The application will open in your default web browser.
+The application will open in your default web browser at `http://127.0.0.1:XXXX`
 
-2. **Configure Inputs:**
-   - Adjust regional parameters (population, dwellings, parking difficulty)
-   - Set costs (delivery, washing, drying)
-   - Configure pricing (wash price, dry price, discounts)
-   - Define capacity (vans, machines, drivers)
-   - Choose randomization settings (distribution type, peak hours, demand scenario)
+2. **Load a Preset Scenario (Optional):**
+   - Select **"Realistic"**, **"Pessimistic"**, or **"Optimistic"** from the dropdown
+   - This will auto-populate all configuration parameters
+   - Or select **"Custom"** to manually configure all parameters
 
-3. **Run Simulation:**
+3. **Configure Parameters:**
+   - **Regional**: Population, dwellings, parking difficulty, geographic density
+   - **Pricing**: Wash/dry prices, self-check discount, subscription discount
+   - **Costs**: Driver rate, washing/drying costs, overhead, fuel
+   - **Capacity**: Number of vans, drivers, wash machines, dry machines, operating hours
+   - **Simulation**: Demand scenario, duration, price elasticity, subscription rate, random seed
+
+4. **Run Simulation:**
    - Click **"Run Simulation"** button
-   - Wait for progress indicator (typically 2-5 minutes for 1-week scenario)
-   - View results in dashboard
+   - Wait for progress modal (typically 5-30 seconds for 7-day scenario)
+   - Results automatically display in Summary tab
 
-4. **Interpret Results:**
-   - **Summary Tab**: Key financial and operational metrics at a glance
-   - **Financial Tab**: Revenue, costs, profit/loss, break-even analysis
-   - **Operations Tab**: Utilization metrics, bottleneck identification
-   - **Charts Tab**: Interactive visualizations of results
+5. **Explore Results:**
+   - **Summary Tab**: Key metrics dashboard with revenue, costs, profit, bottlenecks
+   - **Financial Tab**: Detailed revenue breakdown, cost analysis, P&L statement, break-even chart
+   - **Operations Tab**: Resource utilization charts, bottleneck analysis, service level metrics
+   - **Scenarios Tab**: Compare multiple simulation runs side-by-side
+   - **About Tab**: Application information and feature documentation
+
+6. **Compare Scenarios:**
+   - Run a simulation with desired parameters
+   - Click **"Add Current Results to Comparison"** in Scenarios tab
+   - Adjust parameters and run another simulation
+   - Add to comparison again
+   - View side-by-side comparison table and charts
 
 ### Testing Phase 4 Implementation
 
