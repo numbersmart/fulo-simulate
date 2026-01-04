@@ -92,6 +92,22 @@ The application will open in your default web browser.
    - **Operations Tab**: Utilization metrics, bottleneck identification
    - **Charts Tab**: Interactive visualizations of results
 
+### Testing Phase 4 Implementation
+
+To test the order generation and routing functionality:
+
+```r
+# Run Phase 4 test suite
+source("test_phase4.R")
+```
+
+This will test:
+- Order generation with all three scenario configs (realistic, pessimistic, optimistic)
+- Configuration validation
+- Service type distribution
+- Price elasticity effects
+- Routing calculations (distance, travel time with traffic and parking)
+
 ## Project Structure
 
 ```

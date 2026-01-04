@@ -75,9 +75,8 @@ run_simulation <- function(config, random_seed = 42) {
   # Initialize capacity state
   capacity_state <- initialize_capacity_state(config)
 
-  # Generate orders (this will be implemented in Phase 4)
-  # For now, create a simple test set
-  orders <- generate_test_orders(config)
+  # Generate orders using realistic demand modeling
+  orders <- generate_orders(config, random_seed)
   message("  Generated ", nrow(orders), " orders")
 
   # Initialize order tracking
@@ -220,7 +219,7 @@ reserve_resource <- function(capacity_state, resource_type, resource_id, end_tim
 create_initial_event_queue <- function(orders) {
   # Each order starts with a "schedule_pickup" event
   events <- data.frame(
-    event_time = orders$pickup_time_requested,
+    event_time = orders$preferred_pickup_time,
     event_type = "schedule_pickup",
     order_id = orders$order_id,
     stringsAsFactors = FALSE
@@ -437,7 +436,7 @@ handle_washing <- function(event, order, capacity_state, config) {
 
   if (wash_check$available) {
     # Calculate wash duration based on weight
-    wash_duration_min <- WASH_TIME_BASE_MIN + (order$weight_kg * WASH_TIME_PER_KG_MIN)
+    wash_duration_min <- WASH_TIME_BASE_MIN + (order$kg_estimate * WASH_TIME_PER_KG_MIN)
     wash_end_time <- event$event_time + minutes(wash_duration_min)
 
     # Reserve machine
@@ -513,7 +512,7 @@ handle_drying <- function(event, order, capacity_state, config) {
 
   if (dry_check$available) {
     # Calculate dry duration
-    dry_duration_min <- DRY_TIME_BASE_MIN + (order$weight_kg * DRY_TIME_PER_KG_MIN)
+    dry_duration_min <- DRY_TIME_BASE_MIN + (order$kg_estimate * DRY_TIME_PER_KG_MIN)
     dry_end_time <- event$event_time + minutes(dry_duration_min)
 
     # Reserve machine
@@ -566,7 +565,7 @@ handle_drying <- function(event, order, capacity_state, config) {
 #' @return List with updated order, capacity_state, and new_events
 handle_folding <- function(event, order, capacity_state, config) {
   # ASSUMPTION: Folding has no capacity constraint (workers can fold anytime)
-  folding_duration_min <- order$weight_kg * FOLDING_TIME_PER_KG_MIN
+  folding_duration_min <- order$kg_estimate * FOLDING_TIME_PER_KG_MIN
   folding_end_time <- event$event_time + minutes(folding_duration_min)
 
   # Update order
@@ -600,7 +599,7 @@ handle_folding <- function(event, order, capacity_state, config) {
 #' @return List with updated order, capacity_state, and new_events
 handle_delivery_scheduling <- function(event, order, capacity_state, config) {
   # Use requested delivery time or earliest available
-  target_time <- max(event$event_time, order$delivery_time_requested)
+  target_time <- max(event$event_time, order$preferred_delivery_time)
 
   # Check van and driver availability
   van_check <- check_resource_availability(capacity_state, "van", target_time)
