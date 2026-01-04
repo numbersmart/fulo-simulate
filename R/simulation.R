@@ -79,9 +79,24 @@ run_simulation <- function(config, random_seed = 42) {
   orders <- generate_orders(config, random_seed)
   message("  Generated ", nrow(orders), " orders")
 
-  # Initialize order tracking
+  # Initialize order tracking columns
+  # Pre-initialize ALL columns that will be used during simulation to avoid column mismatch
   orders$status <- "placed"
   orders$current_stage_start <- orders$placement_time
+  orders$pickup_time_actual <- as.POSIXct(NA)
+  orders$assigned_van <- NA_integer_
+  orders$assigned_driver <- NA_integer_
+  orders$pickup_completed_time <- as.POSIXct(NA)
+  orders$wash_start_time <- as.POSIXct(NA)
+  orders$wash_end_time <- as.POSIXct(NA)
+  orders$assigned_wash_machine <- NA_integer_
+  orders$dry_start_time <- as.POSIXct(NA)
+  orders$dry_end_time <- as.POSIXct(NA)
+  orders$assigned_dry_machine <- NA_integer_
+  orders$folding_end_time <- as.POSIXct(NA)
+  orders$delivery_time_scheduled <- as.POSIXct(NA)
+  orders$delivery_time_actual <- as.POSIXct(NA)
+  orders$total_time_hours <- NA_real_
 
   # Create event queue (all events to be processed)
   event_queue <- create_initial_event_queue(orders)
@@ -246,7 +261,25 @@ create_initial_event_queue <- function(orders) {
 process_event_queue <- function(event_queue, orders, capacity_state, config) {
   message("Processing ", nrow(event_queue), " initial events...")
 
+  MAX_ITERATIONS <- 100000  # Safety limit to prevent infinite loops
+  iteration <- 0
+  progress_interval <- 1000
+
   while (nrow(event_queue) > 0) {
+    iteration <- iteration + 1
+
+    # Safety check for infinite loops
+    if (iteration > MAX_ITERATIONS) {
+      warning(sprintf("Reached maximum iteration limit (%d). Possible infinite loop detected.", MAX_ITERATIONS))
+      warning(sprintf("Remaining events in queue: %d", nrow(event_queue)))
+      break
+    }
+
+    # Progress reporting
+    if (iteration %% progress_interval == 0) {
+      message(sprintf("  Processed %d events, %d remaining in queue", iteration, nrow(event_queue)))
+    }
+
     # Get next event
     event <- event_queue[1, ]
     event_queue <- event_queue[-1, , drop = FALSE]
@@ -265,7 +298,7 @@ process_event_queue <- function(event_queue, orders, capacity_state, config) {
     }
   }
 
-  message("All events processed")
+  message(sprintf("All events processed (total iterations: %d)", iteration))
   return(orders)
 }
 
