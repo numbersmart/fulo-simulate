@@ -333,7 +333,7 @@ handle_pickup_scheduling <- function(event, order, capacity_state, config) {
   if (van_check$available && driver_check$available) {
     # Schedule pickup
     pickup_duration_min <- PICKUP_TIME_PER_STOP_MIN
-    pickup_end_time <- event$event_time + minutes(pickup_duration_min)
+    pickup_end_time <- event$event_time + minutes(as.integer(pickup_duration_min))
 
     # Reserve resources
     capacity_state <- reserve_resource(capacity_state, "van", van_check$resource_id, pickup_end_time)
@@ -393,7 +393,7 @@ handle_pickup_execution <- function(event, order, capacity_state, config) {
   # Create next event: start washing
   # ASSUMPTION: Intake/scanning happens immediately upon arrival at laundromat
   intake_duration_min <- INTAKE_TIME_PER_ITEM_MIN * 5  # Assume 5 items average
-  intake_end_time <- event$event_time + minutes(intake_duration_min)
+  intake_end_time <- event$event_time + minutes(as.integer(intake_duration_min))
 
   new_events <- data.frame(
     event_time = intake_end_time,
@@ -437,7 +437,7 @@ handle_washing <- function(event, order, capacity_state, config) {
   if (wash_check$available) {
     # Calculate wash duration based on weight
     wash_duration_min <- WASH_TIME_BASE_MIN + (order$kg_estimate * WASH_TIME_PER_KG_MIN)
-    wash_end_time <- event$event_time + minutes(wash_duration_min)
+    wash_end_time <- event$event_time + minutes(as.integer(wash_duration_min))
 
     # Reserve machine
     capacity_state <- reserve_resource(capacity_state, "wash", wash_check$resource_id, wash_end_time)
@@ -513,7 +513,7 @@ handle_drying <- function(event, order, capacity_state, config) {
   if (dry_check$available) {
     # Calculate dry duration
     dry_duration_min <- DRY_TIME_BASE_MIN + (order$kg_estimate * DRY_TIME_PER_KG_MIN)
-    dry_end_time <- event$event_time + minutes(dry_duration_min)
+    dry_end_time <- event$event_time + minutes(as.integer(dry_duration_min))
 
     # Reserve machine
     capacity_state <- reserve_resource(capacity_state, "dry", dry_check$resource_id, dry_end_time)
@@ -566,7 +566,7 @@ handle_drying <- function(event, order, capacity_state, config) {
 handle_folding <- function(event, order, capacity_state, config) {
   # ASSUMPTION: Folding has no capacity constraint (workers can fold anytime)
   folding_duration_min <- order$kg_estimate * FOLDING_TIME_PER_KG_MIN
-  folding_end_time <- event$event_time + minutes(folding_duration_min)
+  folding_end_time <- event$event_time + minutes(as.integer(folding_duration_min))
 
   # Update order
   order$status <- "folded"
@@ -608,7 +608,7 @@ handle_delivery_scheduling <- function(event, order, capacity_state, config) {
   if (van_check$available && driver_check$available) {
     # Schedule delivery
     delivery_duration_min <- DELIVERY_TIME_PER_STOP_MIN
-    delivery_end_time <- target_time + minutes(delivery_duration_min)
+    delivery_end_time <- target_time + minutes(as.integer(delivery_duration_min))
 
     # Reserve resources
     capacity_state <- reserve_resource(capacity_state, "van", van_check$resource_id, delivery_end_time)
