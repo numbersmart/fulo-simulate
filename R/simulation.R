@@ -169,7 +169,7 @@ initialize_capacity_state <- function(config) {
 #' @param resource_type Character: "van", "driver", "wash", or "dry"
 #' @param required_time POSIXct time when resource is needed
 #'
-#' @return List with available (logical) and resource_id (if available)
+#' @return List with available (logical), resource_id (if available), and next_available_time
 check_resource_availability <- function(capacity_state, resource_type, required_time) {
   availability_vec <- switch(resource_type,
     van = capacity_state$van_availability,
@@ -182,9 +182,19 @@ check_resource_availability <- function(capacity_state, resource_type, required_
   available_idx <- which(availability_vec <= required_time)
 
   if (length(available_idx) > 0) {
-    return(list(available = TRUE, resource_id = available_idx[1]))
+    return(list(
+      available = TRUE,
+      resource_id = available_idx[1],
+      next_available_time = NULL
+    ))
   } else {
-    return(list(available = FALSE, resource_id = NA))
+    # Return when the earliest resource will be available
+    earliest_time <- min(availability_vec)
+    return(list(
+      available = FALSE,
+      resource_id = NA,
+      next_available_time = earliest_time
+    ))
   }
 }
 
@@ -385,9 +395,14 @@ handle_pickup_scheduling <- function(event, order, capacity_state, config) {
       order_id = order$order_id
     )
   } else {
-    # Queue for later - reschedule in 30 minutes
+    # Queue for later - schedule for when resources will actually be available
+    # Find the later of the two next available times (need both van AND driver)
+    next_van_time <- if (!van_check$available) van_check$next_available_time else event$event_time
+    next_driver_time <- if (!driver_check$available) driver_check$next_available_time else event$event_time
+    next_available <- max(next_van_time, next_driver_time)
+
     new_events <- data.frame(
-      event_time = event$event_time + minutes(30),
+      event_time = next_available,
       event_type = "schedule_pickup",
       order_id = order$order_id
     )
@@ -396,7 +411,8 @@ handle_pickup_scheduling <- function(event, order, capacity_state, config) {
     capacity_state$queue_log[[length(capacity_state$queue_log) + 1]] <- list(
       time = event$event_time,
       order_id = order$order_id,
-      reason = "van_or_driver_unavailable"
+      reason = "van_or_driver_unavailable",
+      rescheduled_for = next_available
     )
   }
 
@@ -496,9 +512,9 @@ handle_washing <- function(event, order, capacity_state, config) {
       )
     }
   } else {
-    # Queue for later
+    # Queue for later - schedule for when machine will actually be available
     new_events <- data.frame(
-      event_time = event$event_time + minutes(15),
+      event_time = wash_check$next_available_time,
       event_type = "start_washing",
       order_id = order$order_id
     )
@@ -506,7 +522,8 @@ handle_washing <- function(event, order, capacity_state, config) {
     capacity_state$queue_log[[length(capacity_state$queue_log) + 1]] <- list(
       time = event$event_time,
       order_id = order$order_id,
-      reason = "wash_machine_unavailable"
+      reason = "wash_machine_unavailable",
+      rescheduled_for = wash_check$next_available_time
     )
   }
 
@@ -564,9 +581,9 @@ handle_drying <- function(event, order, capacity_state, config) {
       order_id = order$order_id
     )
   } else {
-    # Queue for later
+    # Queue for later - schedule for when machine will actually be available
     new_events <- data.frame(
-      event_time = event$event_time + minutes(15),
+      event_time = dry_check$next_available_time,
       event_type = "start_drying",
       order_id = order$order_id
     )
@@ -574,7 +591,8 @@ handle_drying <- function(event, order, capacity_state, config) {
     capacity_state$queue_log[[length(capacity_state$queue_log) + 1]] <- list(
       time = event$event_time,
       order_id = order$order_id,
-      reason = "dry_machine_unavailable"
+      reason = "dry_machine_unavailable",
+      rescheduled_for = dry_check$next_available_time
     )
   }
 
@@ -658,9 +676,14 @@ handle_delivery_scheduling <- function(event, order, capacity_state, config) {
       order_id = order$order_id
     )
   } else {
-    # Queue for later
+    # Queue for later - schedule for when resources will actually be available
+    # Find the later of the two next available times (need both van AND driver)
+    next_van_time <- if (!van_check$available) van_check$next_available_time else target_time
+    next_driver_time <- if (!driver_check$available) driver_check$next_available_time else target_time
+    next_available <- max(next_van_time, next_driver_time)
+
     new_events <- data.frame(
-      event_time = target_time + minutes(30),
+      event_time = next_available,
       event_type = "schedule_delivery",
       order_id = order$order_id
     )
@@ -668,7 +691,8 @@ handle_delivery_scheduling <- function(event, order, capacity_state, config) {
     capacity_state$queue_log[[length(capacity_state$queue_log) + 1]] <- list(
       time = target_time,
       order_id = order$order_id,
-      reason = "delivery_van_or_driver_unavailable"
+      reason = "delivery_van_or_driver_unavailable",
+      rescheduled_for = next_available
     )
   }
 
