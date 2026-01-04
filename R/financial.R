@@ -352,6 +352,25 @@ calculate_financial_summary <- function(simulation_results, config) {
   profit_loss <- calculate_profit_loss(revenue, total_costs)
   breakeven <- calculate_breakeven(revenue, total_costs, config)
 
+  # Calculate missed revenue from abandoned orders
+  missed_revenue <- NULL
+  if (!is.null(simulation_results$booking_stats) &&
+      !is.null(simulation_results$booking_stats$missed_orders) &&
+      nrow(simulation_results$booking_stats$missed_orders) > 0) {
+
+    missed_orders <- simulation_results$booking_stats$missed_orders
+    missed_revenue_calc <- calculate_revenue(missed_orders, config)
+
+    missed_revenue <- list(
+      total_missed_revenue = missed_revenue_calc$total_revenue,
+      missed_orders = nrow(missed_orders),
+      abandonment_rate = simulation_results$booking_stats$abandonment_rate,
+      potential_total_revenue = revenue$total_revenue + missed_revenue_calc$total_revenue,
+      revenue_capture_rate = revenue$total_revenue /
+                             (revenue$total_revenue + missed_revenue_calc$total_revenue)
+    )
+  }
+
   return(list(
     revenue = revenue,
     operational_costs = operational_costs,
@@ -359,13 +378,18 @@ calculate_financial_summary <- function(simulation_results, config) {
     total_costs = total_costs,
     profit_loss = profit_loss,
     breakeven = breakeven,
+    missed_revenue = missed_revenue,
     summary = list(
       total_revenue = revenue$total_revenue,
       total_costs = total_costs$total_cost,
       gross_profit = profit_loss$gross_profit,
       gross_margin_pct = profit_loss$gross_margin_pct,
       breakeven_orders = breakeven$breakeven_orders,
-      is_profitable = profit_loss$is_profitable
+      is_profitable = profit_loss$is_profitable,
+      # Add missed revenue metrics to summary
+      missed_revenue = if (!is.null(missed_revenue)) missed_revenue$total_missed_revenue else 0,
+      abandonment_rate = if (!is.null(missed_revenue)) missed_revenue$abandonment_rate else 0,
+      revenue_capture_rate = if (!is.null(missed_revenue)) missed_revenue$revenue_capture_rate else 1.0
     )
   ))
 }

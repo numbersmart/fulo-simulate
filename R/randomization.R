@@ -108,13 +108,184 @@ generate_orders <- function(config, random_seed = 42) {
   orders <- orders[order(orders$placement_time), ]
   rownames(orders) <- NULL
 
-  message(sprintf("Generated %d orders with %d wash_dry, %d wash_only, %d dry_only",
+  message(sprintf("Generated %d demand orders with %d wash_dry, %d wash_only, %d dry_only",
                   nrow(orders),
                   sum(orders$service_type == "wash_dry"),
                   sum(orders$service_type == "wash_only"),
                   sum(orders$service_type == "dry_only")))
 
-  return(orders)
+  # Simulate capacity-constrained booking process (Model 2: Appointment Booking)
+  booking_result <- simulate_booking_with_capacity(orders, config)
+
+  message(sprintf("Booking simulation: %d booked, %d missed (%.1f%% abandonment)",
+                  nrow(booking_result$booked_orders),
+                  nrow(booking_result$missed_orders),
+                  booking_result$abandonment_rate * 100))
+
+  return(booking_result)
+}
+
+
+#' Simulate Capacity-Constrained Booking Process
+#'
+#' Models appointment booking behavior where customers try to book available time slots.
+#' When preferred slots are full, customers may accept nearby times or abandon the order.
+#'
+#' BUSINESS MODEL: Appointment Booking (Model 2)
+#' - Customers see available time slots and book appointments
+#' - If preferred time unavailable, may shift within acceptable window
+#' - If no acceptable slot found, customer abandons order (missed revenue)
+#'
+#' @param demand_orders Data frame of orders representing customer demand (what they want)
+#' @param config Configuration list with capacity and booking parameters
+#'
+#' @return List with:
+#'   - booked_orders: Data frame of successfully booked orders
+#'   - missed_orders: Data frame of abandoned orders (no acceptable slot)
+#'   - total_demand: Integer count of original demand
+#'   - abandonment_rate: Numeric proportion of missed orders
+#'   - abandonment_reasons: Data frame with breakdown of why orders were missed
+simulate_booking_with_capacity <- function(demand_orders, config) {
+  # Extract configuration
+  num_vans <- config$capacity$num_vans
+  num_drivers <- config$capacity$num_drivers
+
+  # Booking flexibility: how many hours can customer shift from preferred time?
+  # ASSUMPTION: Customers accept ±4 hours from preferred pickup time
+  booking_flexibility_hours <- if (!is.null(config$booking$flexibility_hours)) {
+    config$booking$flexibility_hours
+  } else {
+    4  # Default: ±4 hours
+  }
+
+  # Slot duration for pickups (in hours)
+  # ASSUMPTION: Each pickup slot is 2 hours (e.g., 10:00-12:00, 12:00-14:00)
+  slot_duration_hours <- if (!is.null(config$booking$slot_duration_hours)) {
+    config$booking$slot_duration_hours
+  } else {
+    2  # Default: 2-hour slots
+  }
+
+  # Pickup duration (how long van is occupied per pickup)
+  # ASSUMPTION: 30 minutes per stop
+  pickup_duration_hours <- 0.5
+
+  # Calculate how many concurrent pickups can happen per slot
+  # Each van can do multiple pickups within a slot if duration < slot length
+  pickups_per_van_per_slot <- floor(slot_duration_hours / pickup_duration_hours)
+  capacity_per_slot <- min(num_vans, num_drivers) * pickups_per_van_per_slot
+
+  message(sprintf("Booking simulation: %d slots/2hrs, %d capacity/slot",
+                  pickups_per_van_per_slot, capacity_per_slot))
+
+  # Initialize capacity tracking: slots and their available capacity
+  # Track from first order to last order + buffer
+  start_time <- min(demand_orders$preferred_pickup_time)
+  end_time <- max(demand_orders$preferred_pickup_time) + (24 * 3600)  # +24 hours buffer
+
+  # Create time slots
+  slot_starts <- seq(from = start_time, to = end_time, by = slot_duration_hours * 3600)
+  slot_capacity <- data.frame(
+    slot_start = slot_starts,
+    slot_end = slot_starts + (slot_duration_hours * 3600),
+    available = rep(capacity_per_slot, length(slot_starts))
+  )
+
+  # Process orders in placement order (first-come-first-served)
+  demand_orders <- demand_orders[order(demand_orders$placement_time), ]
+
+  booked_orders <- data.frame()
+  missed_orders <- data.frame()
+  abandonment_reasons <- data.frame(
+    reason = character(),
+    count = integer(),
+    stringsAsFactors = FALSE
+  )
+
+  for (i in 1:nrow(demand_orders)) {
+    order <- demand_orders[i, ]
+    preferred_time <- order$preferred_pickup_time
+
+    # Find the slot containing preferred time
+    preferred_slot_idx <- which(slot_capacity$slot_start <= preferred_time &
+                                 slot_capacity$slot_end > preferred_time)
+
+    booked <- FALSE
+    reason <- NA
+
+    # Try preferred slot first
+    if (length(preferred_slot_idx) > 0 && slot_capacity$available[preferred_slot_idx] > 0) {
+      # Book preferred slot
+      slot_capacity$available[preferred_slot_idx] <- slot_capacity$available[preferred_slot_idx] - 1
+      booked_orders <- rbind(booked_orders, order)
+      booked <- TRUE
+    } else {
+      # Preferred slot full - try nearby slots within flexibility window
+      earliest_acceptable <- preferred_time - (booking_flexibility_hours * 3600)
+      latest_acceptable <- preferred_time + (booking_flexibility_hours * 3600)
+
+      # Find alternative slots within window
+      alternative_slots <- which(
+        slot_capacity$slot_start >= earliest_acceptable &
+        slot_capacity$slot_start <= latest_acceptable &
+        slot_capacity$available > 0
+      )
+
+      if (length(alternative_slots) > 0) {
+        # Book closest available slot
+        slot_idx <- alternative_slots[1]
+        slot_capacity$available[slot_idx] <- slot_capacity$available[slot_idx] - 1
+
+        # Update order's preferred_pickup_time to the booked slot
+        order$preferred_pickup_time <- slot_capacity$slot_start[slot_idx]
+
+        # Also shift delivery time proportionally
+        time_shift <- as.numeric(difftime(slot_capacity$slot_start[slot_idx],
+                                          preferred_time, units = "secs"))
+        order$preferred_delivery_time <- order$preferred_delivery_time + time_shift
+
+        booked_orders <- rbind(booked_orders, order)
+        booked <- TRUE
+        reason <- "shifted_to_available_slot"
+      } else {
+        # No acceptable slot found - customer abandons
+        reason <- if (length(preferred_slot_idx) > 0) {
+          "preferred_slot_full_no_flexibility"
+        } else {
+          "preferred_time_outside_operating_hours"
+        }
+      }
+    }
+
+    if (!booked) {
+      # Track missed order
+      order$abandonment_reason <- reason
+      missed_orders <- rbind(missed_orders, order)
+    }
+  }
+
+  # Calculate abandonment statistics
+  total_demand <- nrow(demand_orders)
+  num_booked <- nrow(booked_orders)
+  num_missed <- nrow(missed_orders)
+  abandonment_rate <- num_missed / total_demand
+
+  # Summarize reasons
+  if (num_missed > 0) {
+    abandonment_reasons <- as.data.frame(table(missed_orders$abandonment_reason))
+    colnames(abandonment_reasons) <- c("reason", "count")
+  }
+
+  return(list(
+    booked_orders = booked_orders,
+    missed_orders = missed_orders,
+    total_demand = total_demand,
+    orders_booked = num_booked,
+    orders_missed = num_missed,
+    abandonment_rate = abandonment_rate,
+    abandonment_reasons = abandonment_reasons,
+    slot_utilization = slot_capacity
+  ))
 }
 
 

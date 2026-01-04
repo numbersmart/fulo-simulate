@@ -75,9 +75,10 @@ run_simulation <- function(config, random_seed = 42) {
   # Initialize capacity state
   capacity_state <- initialize_capacity_state(config)
 
-  # Generate orders using realistic demand modeling
-  orders <- generate_orders(config, random_seed)
-  message("  Generated ", nrow(orders), " orders")
+  # Generate orders using realistic demand modeling with capacity-aware booking
+  booking_result <- generate_orders(config, random_seed)
+  orders <- booking_result$booked_orders
+  message("  Booked ", nrow(orders), " orders (", booking_result$orders_missed, " missed)")
 
   # Initialize order tracking columns
   # Pre-initialize ALL columns that will be used during simulation to avoid column mismatch
@@ -118,12 +119,23 @@ run_simulation <- function(config, random_seed = 42) {
   message("Simulation complete!")
   message("  Orders processed: ", nrow(processed_orders))
   message("  Bottlenecks found: ", length(bottlenecks))
+  message("  Demand capture: ", booking_result$orders_booked, "/", booking_result$total_demand,
+          " (", sprintf("%.1f%%", (1 - booking_result$abandonment_rate) * 100), " conversion)")
 
   return(list(
     orders = processed_orders,
     capacity_log = capacity_state$log,
     bottlenecks = bottlenecks,
-    summary_stats = summary_stats
+    summary_stats = summary_stats,
+    # Booking statistics (missed orders / demand capture)
+    booking_stats = list(
+      total_demand = booking_result$total_demand,
+      orders_booked = booking_result$orders_booked,
+      orders_missed = booking_result$orders_missed,
+      abandonment_rate = booking_result$abandonment_rate,
+      abandonment_reasons = booking_result$abandonment_reasons,
+      missed_orders = booking_result$missed_orders
+    )
   ))
 }
 
