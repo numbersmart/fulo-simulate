@@ -157,9 +157,9 @@ fulo-simulate/
 
 ## Documentation
 
-- **[User Guide](docs/user_guide.md)**: Step-by-step instructions for using the tool
-- **[Metrics Guide](docs/metrics_guide.md)**: How to interpret simulation results
-- **[Implementation Plan](plan.md)**: Technical implementation roadmap
+- **[User Guide](docs/USER_GUIDE.md)**: Comprehensive guide for business users with scenarios, parameters, results interpretation, use cases, troubleshooting, and best practices
+- **[Developer Guide](docs/DEVELOPER_GUIDE.md)**: Technical guide for developers with architecture overview, module documentation, development workflow, testing, and contributing guidelines
+- **[Changelog](CHANGELOG.md)**: Complete version history and release notes
 - **[Coding Standards](docs/coding_standards.md)**: Development guidelines
 
 ## Support
@@ -170,15 +170,15 @@ fulo-simulate/
 
 ## License
 
-Internal tool for Numbersmart. Not for public distribution.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Authors
 
 - **Product Owner**: Eduardo Flores
 - **Development**: AI-assisted implementation
-- **Version**: 1.0.0-alpha
+- **Version**: 1.0.0
 
 ---
 
-**Status**: Alpha - In Development
-**Last Updated**: 2026-01-02
+**Status**: Production Release
+**Last Updated**: 2026-01-04
