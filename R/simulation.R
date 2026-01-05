@@ -525,8 +525,12 @@ handle_washing <- function(event, order, capacity_state, config) {
     }
   } else {
     # Queue for later - schedule for when machine will actually be available
+    # Add small stagger (1-5 min) to prevent all orders rescheduling to same time
+    stagger_minutes <- runif(1, min = 1, max = 5)
+    reschedule_time <- wash_check$next_available_time + (stagger_minutes * 60)
+
     new_events <- data.frame(
-      event_time = wash_check$next_available_time,
+      event_time = reschedule_time,
       event_type = "start_washing",
       order_id = order$order_id
     )
@@ -535,7 +539,7 @@ handle_washing <- function(event, order, capacity_state, config) {
       time = event$event_time,
       order_id = order$order_id,
       reason = "wash_machine_unavailable",
-      rescheduled_for = wash_check$next_available_time
+      rescheduled_for = reschedule_time
     )
   }
 
@@ -594,8 +598,12 @@ handle_drying <- function(event, order, capacity_state, config) {
     )
   } else {
     # Queue for later - schedule for when machine will actually be available
+    # Add small stagger (1-5 min) to prevent all orders rescheduling to same time
+    stagger_minutes <- runif(1, min = 1, max = 5)
+    reschedule_time <- dry_check$next_available_time + (stagger_minutes * 60)
+
     new_events <- data.frame(
-      event_time = dry_check$next_available_time,
+      event_time = reschedule_time,
       event_type = "start_drying",
       order_id = order$order_id
     )
@@ -604,7 +612,7 @@ handle_drying <- function(event, order, capacity_state, config) {
       time = event$event_time,
       order_id = order$order_id,
       reason = "dry_machine_unavailable",
-      rescheduled_for = dry_check$next_available_time
+      rescheduled_for = reschedule_time
     )
   }
 
