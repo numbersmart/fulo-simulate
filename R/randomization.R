@@ -149,6 +149,8 @@ simulate_booking_with_capacity <- function(demand_orders, config) {
   # Extract configuration
   num_vans <- config$capacity$num_vans
   num_drivers <- config$capacity$num_drivers
+  num_wash <- config$capacity$num_wash_machines
+  num_dry <- config$capacity$num_dry_machines
 
   # Booking flexibility: how many hours can customer shift from preferred time?
   # ASSUMPTION: Customers accept ±4 hours from preferred pickup time
@@ -158,37 +160,24 @@ simulate_booking_with_capacity <- function(demand_orders, config) {
     4  # Default: ±4 hours
   }
 
-  # Slot duration for pickups (in hours)
-  # ASSUMPTION: Each pickup slot is 2 hours (e.g., 10:00-12:00, 12:00-14:00)
-  slot_duration_hours <- if (!is.null(config$booking$slot_duration_hours)) {
-    config$booking$slot_duration_hours
-  } else {
-    2  # Default: 2-hour slots
-  }
+  # Pipeline timing constants (from simulation.R)
+  PICKUP_TIME_MIN <- 15
+  WASH_TIME_MIN <- 30    # Base time, weight-independent
+  DRY_TIME_MIN <- 35     # Base time, weight-independent
 
-  # Pickup duration (how long van is occupied per pickup)
-  # ASSUMPTION: 30 minutes per stop
-  pickup_duration_hours <- 0.5
+  message(sprintf("Booking simulation: Checking full pipeline capacity (%d vans, %d wash, %d dry)",
+                  num_vans, num_wash, num_dry))
 
-  # Calculate how many concurrent pickups can happen per slot
-  # Each van can do multiple pickups within a slot if duration < slot length
-  pickups_per_van_per_slot <- floor(slot_duration_hours / pickup_duration_hours)
-  capacity_per_slot <- min(num_vans, num_drivers) * pickups_per_van_per_slot
-
-  message(sprintf("Booking simulation: %d slots/2hrs, %d capacity/slot",
-                  pickups_per_van_per_slot, capacity_per_slot))
-
-  # Initialize capacity tracking: slots and their available capacity
-  # Track from first order to last order + buffer
+  # Initialize capacity tracking for ALL resources
+  # Track when each specific resource becomes available again
   start_time <- min(demand_orders$preferred_pickup_time)
-  end_time <- max(demand_orders$preferred_pickup_time) + (24 * 3600)  # +24 hours buffer
+  end_time <- max(demand_orders$preferred_pickup_time) + (48 * 3600)  # +48 hours buffer
 
-  # Create time slots
-  slot_starts <- seq(from = start_time, to = end_time, by = slot_duration_hours * 3600)
-  slot_capacity <- data.frame(
-    slot_start = slot_starts,
-    slot_end = slot_starts + (slot_duration_hours * 3600),
-    available = rep(capacity_per_slot, length(slot_starts))
+  capacity_tracker <- list(
+    van_availability = rep(start_time, num_vans),
+    driver_availability = rep(start_time, num_drivers),
+    wash_availability = rep(start_time, num_wash),
+    dry_availability = rep(start_time, num_dry)
   )
 
   # Process orders in placement order (first-come-first-served)
@@ -196,71 +185,60 @@ simulate_booking_with_capacity <- function(demand_orders, config) {
 
   booked_orders <- data.frame()
   missed_orders <- data.frame()
-  abandonment_reasons <- data.frame(
-    reason = character(),
-    count = integer(),
-    stringsAsFactors = FALSE
-  )
 
   for (i in 1:nrow(demand_orders)) {
     order <- demand_orders[i, ]
-    preferred_time <- order$preferred_pickup_time
+    preferred_pickup <- order$preferred_pickup_time
 
-    # Find the slot containing preferred time
-    preferred_slot_idx <- which(slot_capacity$slot_start <= preferred_time &
-                                 slot_capacity$slot_end > preferred_time)
+    # Try to book at preferred time first
+    booking_attempt <- try_book_order(
+      order, preferred_pickup, capacity_tracker,
+      PICKUP_TIME_MIN, WASH_TIME_MIN, DRY_TIME_MIN
+    )
 
-    booked <- FALSE
-    reason <- NA
-
-    # Try preferred slot first
-    if (length(preferred_slot_idx) > 0 && slot_capacity$available[preferred_slot_idx] > 0) {
-      # Book preferred slot
-      slot_capacity$available[preferred_slot_idx] <- slot_capacity$available[preferred_slot_idx] - 1
+    if (booking_attempt$success) {
+      # Book successful - reserve resources
+      capacity_tracker <- booking_attempt$capacity_tracker
       booked_orders <- rbind(booked_orders, order)
-      booked <- TRUE
     } else {
-      # Preferred slot full - try nearby slots within flexibility window
-      earliest_acceptable <- preferred_time - (booking_flexibility_hours * 3600)
-      latest_acceptable <- preferred_time + (booking_flexibility_hours * 3600)
+      # Preferred time unavailable - try nearby times within flexibility window
+      earliest_acceptable <- preferred_pickup - (booking_flexibility_hours * 3600)
+      latest_acceptable <- preferred_pickup + (booking_flexibility_hours * 3600)
 
-      # Find alternative slots within window
-      alternative_slots <- which(
-        slot_capacity$slot_start >= earliest_acceptable &
-        slot_capacity$slot_start <= latest_acceptable &
-        slot_capacity$available > 0
-      )
+      # Try alternative times in 30-minute increments
+      alternative_times <- seq(from = earliest_acceptable,
+                               to = latest_acceptable,
+                               by = 30 * 60)  # 30-minute slots
 
-      if (length(alternative_slots) > 0) {
-        # Book closest available slot
-        slot_idx <- alternative_slots[1]
-        slot_capacity$available[slot_idx] <- slot_capacity$available[slot_idx] - 1
+      found_slot <- FALSE
+      for (alt_time in alternative_times) {
+        if (alt_time == preferred_pickup) next  # Already tried
 
-        # Update order's preferred_pickup_time to the booked slot
-        order$preferred_pickup_time <- slot_capacity$slot_start[slot_idx]
+        alt_attempt <- try_book_order(
+          order, alt_time, capacity_tracker,
+          PICKUP_TIME_MIN, WASH_TIME_MIN, DRY_TIME_MIN
+        )
 
-        # Also shift delivery time proportionally
-        time_shift <- as.numeric(difftime(slot_capacity$slot_start[slot_idx],
-                                          preferred_time, units = "secs"))
-        order$preferred_delivery_time <- order$preferred_delivery_time + time_shift
+        if (alt_attempt$success) {
+          # Found available slot - reserve resources
+          capacity_tracker <- alt_attempt$capacity_tracker
 
-        booked_orders <- rbind(booked_orders, order)
-        booked <- TRUE
-        reason <- "shifted_to_available_slot"
-      } else {
-        # No acceptable slot found - customer abandons
-        reason <- if (length(preferred_slot_idx) > 0) {
-          "preferred_slot_full_no_flexibility"
-        } else {
-          "preferred_time_outside_operating_hours"
+          # Update order's times to reflect the shift
+          time_shift <- as.numeric(difftime(alt_time, preferred_pickup, units = "secs"))
+          order$preferred_pickup_time <- alt_time
+          order$preferred_delivery_time <- order$preferred_delivery_time + time_shift
+
+          booked_orders <- rbind(booked_orders, order)
+          found_slot <- TRUE
+          break
         }
       }
-    }
 
-    if (!booked) {
-      # Track missed order
-      order$abandonment_reason <- reason
-      missed_orders <- rbind(missed_orders, order)
+      if (!found_slot) {
+        # No acceptable slot found - customer abandons
+        order$abandonment_reason <- booking_attempt$reason
+        missed_orders <- rbind(missed_orders, order)
+      }
     }
   }
 
@@ -271,6 +249,11 @@ simulate_booking_with_capacity <- function(demand_orders, config) {
   abandonment_rate <- num_missed / total_demand
 
   # Summarize reasons
+  abandonment_reasons <- data.frame(
+    reason = character(),
+    count = integer(),
+    stringsAsFactors = FALSE
+  )
   if (num_missed > 0) {
     abandonment_reasons <- as.data.frame(table(missed_orders$abandonment_reason))
     colnames(abandonment_reasons) <- c("reason", "count")
@@ -283,8 +266,95 @@ simulate_booking_with_capacity <- function(demand_orders, config) {
     orders_booked = num_booked,
     orders_missed = num_missed,
     abandonment_rate = abandonment_rate,
-    abandonment_reasons = abandonment_reasons,
-    slot_utilization = slot_capacity
+    abandonment_reasons = abandonment_reasons
+  ))
+}
+
+
+#' Try to Book Order with Full Pipeline Capacity Check
+#'
+#' Checks if all resources (van, driver, wash, dry) will be available
+#' throughout the order's lifecycle. If yes, reserves them.
+#'
+#' @param order Order to book
+#' @param pickup_time Proposed pickup time
+#' @param capacity_tracker Current capacity state
+#' @param pickup_duration Pickup duration in minutes
+#' @param wash_duration Wash duration in minutes
+#' @param dry_duration Dry duration in minutes
+#'
+#' @return List with success (logical), capacity_tracker (updated if booked), reason (if failed)
+try_book_order <- function(order, pickup_time, capacity_tracker,
+                           pickup_duration, wash_duration, dry_duration) {
+
+  # Calculate when resources will be needed throughout pipeline
+  pickup_end <- pickup_time + (pickup_duration * 60)
+  wash_start <- pickup_end
+  wash_end <- wash_start + (wash_duration * 60)
+
+  # Check if washing needed
+  needs_wash <- grepl("wash", order$service_type)
+  needs_dry <- grepl("dry", order$service_type)
+
+  dry_start <- if (needs_wash) wash_end else wash_start
+  dry_end <- dry_start + (dry_duration * 60)
+
+  # 1. Check van/driver availability for pickup
+  van_idx <- which(capacity_tracker$van_availability <= pickup_time)
+  driver_idx <- which(capacity_tracker$driver_availability <= pickup_time)
+
+  if (length(van_idx) == 0 || length(driver_idx) == 0) {
+    return(list(
+      success = FALSE,
+      capacity_tracker = capacity_tracker,
+      reason = "pickup_van_or_driver_unavailable"
+    ))
+  }
+
+  # 2. Check wash machine availability (if needed)
+  if (needs_wash) {
+    wash_idx <- which(capacity_tracker$wash_availability <= wash_start)
+    if (length(wash_idx) == 0) {
+      return(list(
+        success = FALSE,
+        capacity_tracker = capacity_tracker,
+        reason = "wash_machine_unavailable"
+      ))
+    }
+  } else {
+    wash_idx <- NULL
+  }
+
+  # 3. Check dry machine availability (if needed)
+  if (needs_dry) {
+    dry_idx <- which(capacity_tracker$dry_availability <= dry_start)
+    if (length(dry_idx) == 0) {
+      return(list(
+        success = FALSE,
+        capacity_tracker = capacity_tracker,
+        reason = "dry_machine_unavailable"
+      ))
+    }
+  } else {
+    dry_idx <- NULL
+  }
+
+  # All resources available - reserve them!
+  capacity_tracker$van_availability[van_idx[1]] <- pickup_end
+  capacity_tracker$driver_availability[driver_idx[1]] <- pickup_end
+
+  if (needs_wash) {
+    capacity_tracker$wash_availability[wash_idx[1]] <- wash_end
+  }
+
+  if (needs_dry) {
+    capacity_tracker$dry_availability[dry_idx[1]] <- dry_end
+  }
+
+  return(list(
+    success = TRUE,
+    capacity_tracker = capacity_tracker,
+    reason = NA
   ))
 }
 
